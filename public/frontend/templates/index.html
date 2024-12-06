@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video and Chatbot - Dark Mode with Line Drawing and Speech Balloons</title>
+    <style>
+        /* Basic styling */
+        body {
+            display: flex;
+            height: 100vh;
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background-color: #121212;
+            color: #e0e0e0;
+        }
+        #video-container {
+            width: 50%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background-color: #1e1e1e;
+            position: relative;
+        }
+        #videoPlayer {
+            width: 80%;
+            max-width: 800px;
+            height: auto;
+            border: 2px solid #e0e0e0;
+        }
+        #drawingCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 10;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            display: none; /* Initially hidden */
+        }
+        #submit-reset-buttons {
+            display: none; /* Initially hidden */
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 20;
+        }
+        #chat-container {
+            width: 50%;
+            padding: 20px;
+            box-sizing: border-box;
+            border-left: 1px solid #333;
+            background-color: #1e1e1e;
+            display: flex;
+            flex-direction: column;
+            justify-content: center; /* Center content vertically */
+            height: 100vh; /* Make sure the container takes full height */
+        }
+
+        #chatbox {
+            max-height: 70%; /* Adjust the height of the chatbox */
+            overflow-y: auto;
+            border: 1px solid #333;
+            background-color: #2c2c2c;
+            padding: 10px;
+            margin-bottom: 10px;
+            color: #e0e0e0;
+            flex-grow: 1; /* Allow chatbox to grow */
+        }
+        /* Message bubbles */
+        #chatbox .message {
+            display: flex;
+            margin-bottom: 10px;
+        }
+        #chatbox .user {
+            justify-content: flex-end; /* Align user messages to the right */
+        }
+        #chatbox .bot {
+            justify-content: flex-start; /* Align bot messages to the left */
+        }
+        #chatbox .bubble {
+            max-width: 60%;
+            padding: 10px;
+            border-radius: 10px;
+            position: relative;
+            font-size: 14px;
+        }
+        #chatbox .user .bubble {
+            background-color: #444;
+            color: #fff;
+            text-align: right;
+        }
+        #chatbox .bot .bubble {
+            background-color: #555;
+            color: #fff;
+            text-align: left;
+        }
+        /* Speech bubble arrow for user (right side) */
+        #chatbox .user .bubble:after {
+            content: "";
+            position: absolute;
+            top: 10px;
+            right: -10px;
+            border-width: 10px;
+            border-style: solid;
+            border-color: transparent transparent transparent #444;
+        }
+        /* Speech bubble arrow for bot (left side) */
+        #chatbox .bot .bubble:after {
+            content: "";
+            position: absolute;
+            top: 10px;
+            left: -10px;
+            border-width: 10px;
+            border-style: solid;
+            border-color: transparent #555 transparent transparent;
+        }
+        /* Input container and buttons */
+        .input-container {
+            display: flex;
+        }
+        input[type="text"] {
+            flex: 1;
+            padding: 10px;
+            background-color: #333;
+            color: #e0e0e0;
+            border: 1px solid #555;
+            border-radius: 5px 0 0 5px;
+        }
+        button {
+            padding: 10px;
+            background-color: #444;
+            color: #e0e0e0;
+            border: 1px solid #555;
+            border-radius: 0 5px 5px 0;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #555;
+        }
+        /* Styling for the slider */
+        #video-slider {
+            appearance: none;
+            width: 80%;
+            height: 8px;
+            background-color: #555;  /* Default background color */
+            outline: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="video-container">
+        <video id="videoPlayer" controls>
+            <source id="videoSource" src="" type="video/mp4">
+            Your browser does not support the video tag.
+        </video>
+        <canvas id="drawingCanvas"></canvas>
+        <div id="submit-reset-buttons">
+            <button id="submitButton" onclick="submitDrawing()">Submit</button>
+            <button id="resetButton" onclick="resetCanvas()">Reset</button>
+        </div>
+        <!-- Slider for video frames -->
+        <input type="range" id="video-slider" min="0" max="100" value="0">
+    </div>
+
+    <div id="chat-container">
+        <div id="chatbox"></div>
+        <div class="input-container">
+            <input type="text" id="userInput" placeholder="Type your message here..." onkeypress="handleKeyPress(event)">
+            <button onclick="sendMessage()">Send</button>
+        </div>
+    </div>
+
+    <script>
+        let canvas = document.getElementById('drawingCanvas');
+        let ctx = canvas.getContext('2d');
+        let points = [];
+
+        const videoPlayer = document.getElementById('videoPlayer');
+        const videoSlider = document.getElementById('video-slider');
+
+        // Set the video source dynamically
+        let videoFilename = "{{ url_for('static', filename='videos/' + video_filename) }}";
+        document.getElementById('videoSource').src = videoFilename;
+
+        // Resize the canvas to match the video size once the video is loaded
+        videoPlayer.addEventListener('loadedmetadata', function() {
+            canvas.width = videoPlayer.clientWidth;
+            canvas.height = videoPlayer.clientHeight;
+            canvas.style.left = videoPlayer.offsetLeft + 'px';
+            canvas.style.top = videoPlayer.offsetTop + 'px';
+            videoSlider.max = videoPlayer.duration; // Set slider max to video duration
+        });
+
+        // Update video time when the slider is moved
+        videoSlider.addEventListener('input', function() {
+            videoPlayer.currentTime = videoSlider.value;
+        });
+
+        // Update slider position as video plays
+        videoPlayer.addEventListener('timeupdate', function() {
+            videoSlider.value = videoPlayer.currentTime;
+        });
+
+        // Function to allow the user to draw a line on the canvas
+        let drawingMode = 'polygon'; // Default mode is 'line', can be changed to 'polygon'
+        let polygonPoints = [];
+
+        function submitDrawing() {
+        if (drawingMode === 'line') {
+            submitLine();
+        } else if (drawingMode === 'polygon') {
+            submitPolygon();
+        }
+    }
+        // Function to toggle between drawing modes
+        function setDrawingMode(mode) {
+            drawingMode = mode;
+            resetCanvas(); // Reset the canvas when changing mode
+        }
+        let isDrawingEnabled = false;
+
+        function enableDrawing(mode) {
+            isDrawingEnabled = true;
+            drawingMode = mode;
+            canvas.style.display = 'block';
+            resetCanvas();
+        }
+
+        function disableDrawing() {
+            isDrawingEnabled = false;
+            canvas.style.display = 'none';
+            document.getElementById('submit-reset-buttons').style.display = 'none';
+        }
+        canvas.addEventListener('click', function (event) {
+            if (!isDrawingEnabled) return;
+
+            const rect = canvas.getBoundingClientRect();
+            const x = event.clientX - rect.left;
+            const y = event.clientY - rect.top;
+
+            // Normalize coordinates relative to the canvas width and height
+            const normalizedX = x / canvas.width;
+            const normalizedY = y / canvas.height;
+
+            if (drawingMode === 'line') {
+                if (points.length === 2) return;  // Line only needs 2 points
+
+                points.push({ x: normalizedX, y: normalizedY });
+
+                // Draw the point on the canvas
+                ctx.fillStyle = '#fff';
+                ctx.beginPath();
+                ctx.arc(x, y, 5, 0, 2 * Math.PI);
+                ctx.fill();
+
+                if (points.length === 2) {
+                    // Draw the line on the canvas
+                    ctx.beginPath();
+                    ctx.moveTo(points[0].x * canvas.width, points[0].y * canvas.height);
+                    ctx.lineTo(points[1].x * canvas.width, points[1].y * canvas.height);
+                    ctx.strokeStyle = '#fff';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+
+                    document.getElementById('submit-reset-buttons').style.display = 'block';
+                    isDrawingEnabled = false;  // Disable further drawing
+                }
+            } else if (drawingMode === 'polygon') {
+                // Add points for polygon drawing
+                polygonPoints.push({ x: normalizedX, y: normalizedY });
+
+                // Draw the point on the canvas
+                ctx.fillStyle = '#fff';
+                ctx.beginPath();
+                ctx.arc(x, y, 5, 0, 2 * Math.PI);
+                ctx.fill();
+
+                // If there are more than 2 points, draw the polygon
+                if (polygonPoints.length > 1) {
+                    ctx.beginPath();
+                    ctx.moveTo(polygonPoints[0].x * canvas.width, polygonPoints[0].y * canvas.height);
+                    for (let i = 1; i < polygonPoints.length; i++) {
+                        ctx.lineTo(polygonPoints[i].x * canvas.width, polygonPoints[i].y * canvas.height);
+                    }
+
+                    // Close the polygon if the user has clicked 3 or more points
+                    if (polygonPoints.length > 2) {
+                        ctx.lineTo(polygonPoints[0].x * canvas.width, polygonPoints[0].y * canvas.height);
+                    }
+
+                    ctx.strokeStyle = '#fff';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                }
+
+                document.getElementById('submit-reset-buttons').style.display = 'block';
+            }
+        });
+
+        function submitDrawing() {
+            if (drawingMode === 'line') {
+                submitLine();
+            } else if (drawingMode === 'polygon') {
+                submitPolygon();
+            }
+            disableDrawing();
+        }
+
+        function submitPolygon() {
+            fetch('/submit_polygon', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ points: polygonPoints })
+            })
+            .then(response => response.json())
+            .then(data => {
+                const chatbox = document.getElementById('chatbox');
+
+                const botMessageDiv = document.createElement('div');
+                botMessageDiv.classList.add('message', 'bot');
+                const botBubble = document.createElement('div');
+                botBubble.classList.add('bubble');
+                botBubble.innerHTML = data.message;
+
+                botMessageDiv.appendChild(botBubble);
+                chatbox.appendChild(botMessageDiv);
+
+                chatbox.scrollTop = chatbox.scrollHeight;
+
+                resetCanvas(); // Clear canvas after submitting
+            });
+        }
+
+        // Function to submit the drawn line to the backend
+        function submitLine() {
+            fetch('/submit_line', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ points })
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Add the response from the backend to the chatbox
+                const chatbox = document.getElementById('chatbox');
+                
+                const botMessageDiv = document.createElement('div');
+                botMessageDiv.classList.add('message', 'bot'); // Apply bot message class
+                
+                const botBubble = document.createElement('div');
+                botBubble.classList.add('bubble'); // Apply bubble class
+                botBubble.innerHTML  = data.message; // Use the message from the backend response
+                
+                botMessageDiv.appendChild(botBubble);
+                chatbox.appendChild(botMessageDiv);
+
+                chatbox.scrollTop = chatbox.scrollHeight; // Scroll to the bottom of the chatbox
+                
+                resetCanvas(); // Clear the canvas after submitting
+            });
+        }
+
+        // Function to reset the canvas
+        // Updated resetCanvas function to clear both line and polygon data
+        function resetCanvas() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            points = [];
+            polygonPoints = [];
+            document.getElementById('submit-reset-buttons').style.display = 'none';
+        }
+
+        // Function to handle sending a message
+        function sendMessage() {
+            const userInput = document.getElementById('userInput').value;
+            if (userInput.trim() === "") return;
+            const chatbox = document.getElementById('chatbox');
+
+            const userMessageDiv = document.createElement('div');
+            userMessageDiv.classList.add('message', 'user');
+            const userBubble = document.createElement('div');
+            userBubble.classList.add('bubble');
+            userBubble.textContent = userInput;
+            userMessageDiv.appendChild(userBubble);
+            chatbox.appendChild(userMessageDiv);
+
+            fetch('/chat', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ message: userInput })
+            })
+            .then(response => response.json())
+            .then(data => {
+                const botMessageDiv = document.createElement('div');
+                botMessageDiv.classList.add('message', 'bot');
+                const botBubble = document.createElement('div');
+                botBubble.classList.add('bubble');
+                botBubble.textContent = data.response;
+                botMessageDiv.appendChild(botBubble);
+                chatbox.appendChild(botMessageDiv);
+
+                if (data.image_url) {
+                    const botImageDiv = document.createElement('div');
+                    botImageDiv.classList.add('message', 'bot'); // Same message class but for image
+
+                    const image = document.createElement('img');
+                    image.src = data.image_url;
+                    image.alt = 'Bot Image';
+                    image.style.maxWidth = '80%'; // Adjust as necessary
+                    image.style.borderRadius = '10px'; // Styling for the image
+
+                    botImageDiv.appendChild(image);
+
+                    // Append the bot's image message to the chatbox
+                    chatbox.appendChild(botImageDiv);
+                }
+                chatbox.scrollTop = chatbox.scrollHeight;
+
+                // Show the canvas if bot asks to draw a line or polygon
+                if (data.response.toLowerCase().includes('draw the line')) {
+                    enableDrawing('line');
+                } else if (data.response.toLowerCase().includes('draw the polygon')) {
+                    enableDrawing('polygon');
+                }
+
+                // Update video source if bot changes the video file
+                if (data.response.toLowerCase().includes('video changed to')) {
+                    const newVideoFilename = data.filename;
+                    console.log("newvideofilename :", newVideoFilename);
+                    updateVideoSource(newVideoFilename);
+                }
+
+                // Set video time if timestamp is provided in response
+                if (data.timestamp) {
+                    const timeParts = data.timestamp.split(":");
+                    const minutes = parseInt(timeParts[0], 10);
+                    const seconds = parseInt(timeParts[1], 10);
+                    const timeInSeconds = (minutes * 60) + seconds;
+                    videoPlayer.currentTime = timeInSeconds;
+                }
+
+                if (data.timestamps) {
+                    const timeRange = data.timestamps.map(time => {
+                        const [minutes, seconds] = time.split(":").map(Number);
+                        return (minutes * 60) + seconds;  // Convert to seconds
+                    });
+                    highlightRangeOnSlider(timeRange[0], timeRange[1]);
+                }
+                if (data.video_list) {
+                    botBubble.innerHTML += "<br><br>" + data.video_list;
+                }
+                
+                document.getElementById('userInput').value = '';
+            });
+        }
+
+
+        function highlightRangeOnSlider(startTime, endTime) {
+            const slider = document.getElementById('video-slider');
+            const duration = videoPlayer.duration;
+
+            const startPercent = (startTime / duration) * 100;
+            const endPercent = (endTime / duration) * 100;
+
+            // Apply a linear-gradient to visually show the highlighted range on the slider
+            slider.style.background = `linear-gradient(to right, #555 ${startPercent}%, #FF0000 ${startPercent}%, #FF0000 ${endPercent}%, #555 ${endPercent}%)`;
+        }
+
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        }
+
+        // Function to update video source dynamically
+        function updateVideoSource(newFilename) {
+            if (newFilename) {
+                const videoSourceElement = document.getElementById('videoSource');
+                videoSourceElement.src = `/static/videos/${newFilename}`; 
+                const videoPlayer = document.getElementById('videoPlayer');
+                videoPlayer.load(); // Reload the video element to reflect the new source
+
+                // Reset the slider when the video is changed
+                videoPlayer.addEventListener('loadedmetadata', function () {
+                    const videoSlider = document.getElementById('video-slider');
+                    videoSlider.value = 0;
+                    videoSlider.max = videoPlayer.duration;
+                    videoSlider.style.background = '#555';  // Reset background to default
+                });
+            }
+        }
+
+        // Optional function to reset the highlighted range
+        function resetHighlightedRange() {
+            videoSlider.style.background = '#555';  // Reset slider background to default color
+        }
+
+        // Initial bot message with speech balloon
+        window.onload = function () {
+            const chatbox = document.getElementById('chatbox');
+
+            // Create the bot message container
+            const botMessageDiv = document.createElement('div');
+            botMessageDiv.classList.add('message', 'bot'); // Apply bot message class
+
+            // Create the speech bubble for the bot message
+            const botBubble = document.createElement('div');
+            botBubble.classList.add('bubble'); // Apply bubble class
+            botBubble.innerHTML = "What can I do for you?"; // Initial bot message text
+
+            // Append the bubble to the bot message container
+            botMessageDiv.appendChild(botBubble);
+
+            // Append the bot message container to the chatbox
+            chatbox.appendChild(botMessageDiv);
+
+            // Scroll to the bottom of the chatbox (if needed)
+            chatbox.scrollTop = chatbox.scrollHeight;
+        };
+    </script>
+</body>
+</html>

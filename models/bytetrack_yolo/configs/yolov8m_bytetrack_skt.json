@@ -1,0 +1,13 @@
+{
+    "model" : "/home/jiyul/SPS_JY/TeletoVision_demo/models/bytetrack_yolo/ckpt/yolov8m_1280x1280_fellow.pt", 
+    "conf_thresh" : 0.2,
+    "nms_thresh" : 0.6,
+    "bytetrack" : {
+        "track_thresh" : 0.2,
+        "track_buffer" : 30,
+        "match_thresh" : 0.9,
+        "min_box_area" : 25,
+        "mot20" : false, 
+        "fps" : 30
+    }
+}
