@@ -1,0 +1,22 @@
+[텔레토비전 프롬프트]
+
+Select a video showing a motorcycle accident.
+
+Find a motorcycle accident in this video.
+
+Check when the motorcycle accident occurred.
+
+Check how many vehicles crossed the line.
+
+Create a statistical graph based on the line data.
+
+Check how many vehicles crossed the polygon.
+
+Create a statistical graph based on the polygon data.
+
+
+Select a video that contains a fight.
+
+Find any fighting events in this video.
+
+Check when these events occurred.
